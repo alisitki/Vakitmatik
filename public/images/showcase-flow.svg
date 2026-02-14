@@ -1,0 +1,12 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" rx="44" fill="#F0F5FD"/>
+  <rect x="90" y="90" width="1420" height="720" rx="36" fill="#FFFFFF"/>
+  <text x="160" y="190" fill="#14263F" font-size="56" font-family="Arial, sans-serif" font-weight="700">GÖREVLİ KONTROL AKIŞI</text>
+  <rect x="160" y="260" width="1280" height="120" rx="20" fill="#EDF3FF"/>
+  <text x="220" y="338" fill="#1F5FFF" font-size="44" font-family="Arial, sans-serif" font-weight="700">1. Bölgesel Ayar</text>
+  <rect x="160" y="410" width="1280" height="120" rx="20" fill="#EDF3FF"/>
+  <text x="220" y="488" fill="#1F5FFF" font-size="44" font-family="Arial, sans-serif" font-weight="700">2. Panel Kontrolü</text>
+  <rect x="160" y="560" width="1280" height="120" rx="20" fill="#EDF3FF"/>
+  <text x="220" y="638" fill="#1F5FFF" font-size="44" font-family="Arial, sans-serif" font-weight="700">3. Günlük Doğrulama</text>
+  <text x="160" y="760" fill="#4E6380" font-size="34" font-family="Arial, sans-serif">Placeholder medya: gerçek video dosyası geldiğinde aynı path ile değiştirilebilir.</text>
+</svg>

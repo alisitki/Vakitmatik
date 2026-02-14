@@ -1,0 +1,14 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" rx="44" fill="#0F1D35"/>
+  <rect x="70" y="80" width="1460" height="130" rx="20" fill="#1F5FFF"/>
+  <text x="120" y="160" fill="#F4F8FF" font-size="54" font-family="Arial, sans-serif" font-weight="700">VAKITMATIK ANA PANEL</text>
+  <rect x="70" y="250" width="705" height="250" rx="24" fill="#172C4D"/>
+  <rect x="825" y="250" width="705" height="250" rx="24" fill="#172C4D"/>
+  <text x="120" y="340" fill="#D7E7FF" font-size="42" font-family="Arial, sans-serif">İmsak</text>
+  <text x="120" y="430" fill="#F59E0B" font-size="84" font-family="Arial, sans-serif" font-weight="700">05:31</text>
+  <text x="875" y="340" fill="#D7E7FF" font-size="42" font-family="Arial, sans-serif">Akşam</text>
+  <text x="875" y="430" fill="#F59E0B" font-size="84" font-family="Arial, sans-serif" font-weight="700">19:08</text>
+  <rect x="70" y="540" width="1460" height="290" rx="24" fill="#132742"/>
+  <text x="120" y="650" fill="#D7E7FF" font-size="38" font-family="Arial, sans-serif">Öğle 13:12     İkindi 16:44     Yatsı 20:40</text>
+  <text x="120" y="740" fill="#F5F9FF" font-size="52" font-family="Arial, sans-serif" font-weight="700">Toplu alanlar için net bilgilendirme akışı</text>
+</svg>

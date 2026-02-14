@@ -1,0 +1,14 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" rx="44" fill="#10253F"/>
+  <rect x="90" y="90" width="1420" height="720" rx="30" fill="#173354"/>
+  <text x="150" y="190" fill="#F4F8FF" font-size="56" font-family="Arial, sans-serif" font-weight="700">MEKAN BAZLI SENKRON</text>
+  <rect x="150" y="250" width="390" height="480" rx="24" fill="#1D436D"/>
+  <rect x="605" y="250" width="390" height="480" rx="24" fill="#1D436D"/>
+  <rect x="1060" y="250" width="390" height="480" rx="24" fill="#1D436D"/>
+  <text x="200" y="340" fill="#CFE4FF" font-size="40" font-family="Arial, sans-serif">Cami</text>
+  <text x="655" y="340" fill="#CFE4FF" font-size="40" font-family="Arial, sans-serif">Kampüs</text>
+  <text x="1115" y="340" fill="#CFE4FF" font-size="40" font-family="Arial, sans-serif">Kurum</text>
+  <text x="200" y="660" fill="#F59E0B" font-size="36" font-family="Arial, sans-serif">Aynı panel dili</text>
+  <text x="655" y="660" fill="#F59E0B" font-size="36" font-family="Arial, sans-serif">Aynı akış</text>
+  <text x="1115" y="660" fill="#F59E0B" font-size="36" font-family="Arial, sans-serif">Aynı netlik</text>
+</svg>

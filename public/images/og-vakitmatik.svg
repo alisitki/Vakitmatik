@@ -1,0 +1,19 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FBFF"/>
+      <stop offset="1" stop-color="#E9F1FA"/>
+    </linearGradient>
+    <linearGradient id="card" x1="230" y1="140" x2="970" y2="500" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F6EA0"/>
+      <stop offset="1" stop-color="#0A4F76"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect x="230" y="140" width="740" height="350" rx="32" fill="url(#card)"/>
+  <text x="290" y="260" fill="#F8FCFF" font-size="76" font-family="Arial, sans-serif" font-weight="700">VAKITMATIK</text>
+  <text x="292" y="330" fill="#D7EDFF" font-size="36" font-family="Arial, sans-serif">Modern vakit gösterim çözümü</text>
+  <text x="292" y="390" fill="#F4AE4F" font-size="54" font-family="Arial, sans-serif" font-weight="700">Net | Sade | Güvenilir</text>
+  <rect x="290" y="425" width="410" height="32" rx="16" fill="#124D73"/>
+  <text x="312" y="447" fill="#EAF5FF" font-size="22" font-family="Arial, sans-serif">vakitmatik.com.tr</text>
+</svg>
