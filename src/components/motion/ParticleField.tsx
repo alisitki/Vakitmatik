@@ -1,326 +1,369 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import * as THREE from "three";
 import { PARTICLE_CONFIG } from "@/config/heroMotion";
+
+/* ── GLSL Shaders (adapted from BreathDearMedusae) ── */
+
+const VERTEX_SHADER = `
+  uniform float uTime;
+  uniform vec2 uMouse;
+  uniform float uOuterOscFrequency;
+  uniform float uOuterOscAmplitude;
+  uniform float uHaloRadiusBase;
+  uniform float uHaloRadiusAmplitude;
+  uniform float uHaloShapeAmplitude;
+  uniform float uHaloRimWidth;
+  uniform float uHaloOuterStartOffset;
+  uniform float uHaloOuterEndOffset;
+  uniform float uHaloScaleX;
+  uniform float uHaloScaleY;
+  uniform float uParticleBaseSize;
+  uniform float uParticleActiveSize;
+  uniform float uBlobScaleX;
+  uniform float uBlobScaleY;
+  uniform float uParticleRotationSpeed;
+  uniform float uParticleRotationJitter;
+  uniform float uParticleOscillationFactor;
+
+  varying vec2 vUv;
+  varying float vSize;
+  varying vec2 vPos;
+
+  attribute vec3 aOffset;
+  attribute float aRandom;
+
+  float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+  }
+  float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float a = hash(i);
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+  }
+
+  void main() {
+    vUv = uv;
+
+    // 1. ALIVE FLOW (Base layer drift)
+    vec3 pos = aOffset;
+    float driftSpeed = uTime * 0.15;
+    float dx = sin(driftSpeed + pos.y * 0.5) + sin(driftSpeed * 0.5 + pos.y * 2.0);
+    float dy = cos(driftSpeed + pos.x * 0.5) + cos(driftSpeed * 0.5 + pos.x * 2.0);
+    pos.x += dx * 0.25;
+    pos.y += dy * 0.25;
+
+    // 2. JELLYFISH HALO (Ring around cursor)
+    vec2 relToMouse = pos.xy - uMouse;
+    vec2 haloScale = max(vec2(uHaloScaleX, uHaloScaleY), vec2(0.0001));
+    float distFromMouse = length(relToMouse / haloScale);
+    vec2 dirToMouse = normalize(relToMouse + vec2(0.0001, 0.0));
+
+    float shapeFactor = noise(dirToMouse * 2.0 + vec2(0.0, uTime * 0.1));
+
+    float breathCycle = sin(uTime * 0.8);
+    float baseRadius = uHaloRadiusBase + breathCycle * uHaloRadiusAmplitude;
+    float currentRadius = baseRadius + (shapeFactor * uHaloShapeAmplitude);
+
+    float dist = distFromMouse;
+    float rimInfluence = smoothstep(uHaloRimWidth, 0.0, abs(dist - currentRadius));
+
+    vec2 pushDir = normalize(relToMouse + vec2(0.0001, 0.0));
+    float pushAmt = (breathCycle * 0.5 + 0.5) * 0.5;
+    pos.xy += pushDir * pushAmt * rimInfluence;
+    pos.z += rimInfluence * 0.3 * sin(uTime);
+
+    // 3. OUTER OSCILLATION
+    float outerInfluence = smoothstep(baseRadius + uHaloOuterStartOffset, baseRadius + uHaloOuterEndOffset, dist);
+    float outerOsc = sin(uTime * uOuterOscFrequency + pos.x * 0.6 + pos.y * 0.6);
+    pos.xy += normalize(relToMouse + vec2(0.0001, 0.0)) * outerOsc * uOuterOscAmplitude * outerInfluence;
+
+    // 4. SIZE & SCALE
+    float bSize = uParticleBaseSize + (sin(uTime + pos.x) * 0.003);
+    float currentScale = bSize + (rimInfluence * uParticleActiveSize);
+    float stretch = rimInfluence * 0.02;
+
+    vec3 transformed = position;
+    transformed.x *= (currentScale + stretch) * uBlobScaleX;
+    transformed.y *= currentScale * uBlobScaleY;
+
+    vSize = rimInfluence;
+    vPos = pos.xy;
+
+    // 5. ROTATION
+    float dirLen = max(length(relToMouse), 0.0001);
+    vec2 dir = relToMouse / dirLen;
+    float oscPhase = aRandom * 6.28318530718;
+    float osc = 0.5 + 0.5 * sin(uTime * (0.25 + uParticleOscillationFactor * 0.35) + oscPhase);
+    float speedScale = mix(0.55, 1.35, osc) * (0.8 + uParticleOscillationFactor * 0.2);
+    float jitterScale = mix(0.7, 1.45, osc) * (0.85 + uParticleOscillationFactor * 0.15);
+    float jitter = sin(uTime * uParticleRotationSpeed * speedScale + pos.x * 0.35 + pos.y * 0.35) * (uParticleRotationJitter * jitterScale);
+    vec2 perp = vec2(-dir.y, dir.x);
+    vec2 jitteredDir = normalize(dir + perp * jitter);
+    mat2 rot = mat2(jitteredDir.x, jitteredDir.y, -jitteredDir.y, jitteredDir.x);
+    transformed.xy = rot * transformed.xy;
+
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos + transformed, 1.0);
+  }
+`;
+
+const FRAGMENT_SHADER = `
+  uniform float uTime;
+  uniform vec3 uParticleColorBase;
+  uniform vec3 uParticleColorOne;
+  uniform vec3 uParticleColorTwo;
+  uniform vec3 uParticleColorThree;
+  varying vec2 vUv;
+  varying float vSize;
+  varying vec2 vPos;
+
+  void main() {
+    vec2 center = vec2(0.5);
+    vec2 pos = abs(vUv - center) * 2.0;
+    float d = pow(pow(pos.x, 2.6) + pow(pos.y, 2.6), 1.0 / 2.6);
+    float alpha = 1.0 - smoothstep(0.8, 1.0, d);
+    if (alpha < 0.01) discard;
+
+    vec3 black = uParticleColorBase;
+    vec3 cBlue = uParticleColorOne;
+    vec3 cRed = uParticleColorTwo;
+    vec3 cYellow = uParticleColorThree;
+
+    float t = uTime * 1.2;
+    float p1 = sin(vPos.x * 0.8 + t);
+    float p2 = sin(vPos.y * 0.8 + t * 0.8 + p1);
+
+    vec3 activeColor = mix(cBlue, cRed, p1 * 0.5 + 0.5);
+    activeColor = mix(activeColor, cYellow, p2 * 0.5 + 0.5);
+
+    vec3 finalColor = mix(black, activeColor, smoothstep(0.1, 0.8, vSize));
+    float finalAlpha = alpha * mix(0.4, 0.95, vSize);
+
+    gl_FragColor = vec4(finalColor, finalAlpha);
+  }
+`;
+
+/* ── Default config for the halo/particle system ── */
+const MEDUSAE_DEFAULTS = {
+  cursor: {
+    radius: 0.065,
+    strength: 3,
+    dragFactor: 0.015,
+  },
+  halo: {
+    outerOscFrequency: 2.6,
+    outerOscAmplitude: 0.76,
+    radiusBase: 2.4,
+    radiusAmplitude: 0.5,
+    shapeAmplitude: 0.75,
+    rimWidth: 1.8,
+    outerStartOffset: 0.4,
+    outerEndOffset: 2.2,
+    scaleX: 1.3,
+    scaleY: 1,
+  },
+  particles: {
+    baseSize: 0.016,
+    activeSize: 0.044,
+    blobScaleX: 1,
+    blobScaleY: 0.6,
+    rotationSpeed: 0.1,
+    rotationJitter: 0.2,
+    cursorFollowStrength: 1,
+    oscillationFactor: 1,
+    colorBase: "#4285F4",
+    colorOne: "#4285F4",
+    colorTwo: "#EA4335",
+    colorThree: "#FBBC04",
+  },
+};
+
+/* ── Inner Three.js Scene ── */
+
+function Particles() {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const { viewport } = useThree();
+
+  const countX = 100;
+  const countY = 55;
+  const count = countX * countY;
+
+  const geometry = useMemo(() => new THREE.PlaneGeometry(1, 1), []);
+
+  const uniforms = useMemo(
+    () => ({
+      uTime: { value: 0 },
+      uMouse: { value: new THREE.Vector2(0, 0) },
+      uResolution: { value: new THREE.Vector2(typeof window !== "undefined" ? window.innerWidth : 1920, typeof window !== "undefined" ? window.innerHeight : 1080) },
+      uOuterOscFrequency: { value: MEDUSAE_DEFAULTS.halo.outerOscFrequency },
+      uOuterOscAmplitude: { value: MEDUSAE_DEFAULTS.halo.outerOscAmplitude },
+      uHaloRadiusBase: { value: MEDUSAE_DEFAULTS.halo.radiusBase },
+      uHaloRadiusAmplitude: { value: MEDUSAE_DEFAULTS.halo.radiusAmplitude },
+      uHaloShapeAmplitude: { value: MEDUSAE_DEFAULTS.halo.shapeAmplitude },
+      uHaloRimWidth: { value: MEDUSAE_DEFAULTS.halo.rimWidth },
+      uHaloOuterStartOffset: { value: MEDUSAE_DEFAULTS.halo.outerStartOffset },
+      uHaloOuterEndOffset: { value: MEDUSAE_DEFAULTS.halo.outerEndOffset },
+      uHaloScaleX: { value: MEDUSAE_DEFAULTS.halo.scaleX },
+      uHaloScaleY: { value: MEDUSAE_DEFAULTS.halo.scaleY },
+      uParticleBaseSize: { value: MEDUSAE_DEFAULTS.particles.baseSize },
+      uParticleActiveSize: { value: MEDUSAE_DEFAULTS.particles.activeSize },
+      uBlobScaleX: { value: MEDUSAE_DEFAULTS.particles.blobScaleX },
+      uBlobScaleY: { value: MEDUSAE_DEFAULTS.particles.blobScaleY },
+      uParticleRotationSpeed: { value: MEDUSAE_DEFAULTS.particles.rotationSpeed },
+      uParticleRotationJitter: { value: MEDUSAE_DEFAULTS.particles.rotationJitter },
+      uParticleOscillationFactor: { value: MEDUSAE_DEFAULTS.particles.oscillationFactor },
+      uParticleColorBase: { value: new THREE.Color(MEDUSAE_DEFAULTS.particles.colorBase) },
+      uParticleColorOne: { value: new THREE.Color(MEDUSAE_DEFAULTS.particles.colorOne) },
+      uParticleColorTwo: { value: new THREE.Color(MEDUSAE_DEFAULTS.particles.colorTwo) },
+      uParticleColorThree: { value: new THREE.Color(MEDUSAE_DEFAULTS.particles.colorThree) },
+    }),
+    [],
+  );
+
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        uniforms,
+        vertexShader: VERTEX_SHADER,
+        fragmentShader: FRAGMENT_SHADER,
+        transparent: true,
+        depthWrite: false,
+      }),
+    [uniforms],
+  );
+
+  // Build instance grid
+  useEffect(() => {
+    if (!meshRef.current) return;
+
+    const offsets = new Float32Array(count * 3);
+    const randoms = new Float32Array(count);
+
+    const gridWidth = 40;
+    const gridHeight = 22;
+    const jitter = 0.25;
+
+    let i = 0;
+    for (let y = 0; y < countY; y++) {
+      for (let x = 0; x < countX; x++) {
+        const u = x / (countX - 1);
+        const v = y / (countY - 1);
+
+        let px = (u - 0.5) * gridWidth;
+        let py = (v - 0.5) * gridHeight;
+
+        px += (Math.random() - 0.5) * jitter;
+        py += (Math.random() - 0.5) * jitter;
+
+        offsets[i * 3] = px;
+        offsets[i * 3 + 1] = py;
+        offsets[i * 3 + 2] = 0;
+
+        randoms[i] = Math.random();
+        i++;
+      }
+    }
+
+    meshRef.current.geometry.setAttribute(
+      "aOffset",
+      new THREE.InstancedBufferAttribute(offsets, 3),
+    );
+    meshRef.current.geometry.setAttribute(
+      "aRandom",
+      new THREE.InstancedBufferAttribute(randoms, 1),
+    );
+  }, [count, countX, countY]);
+
+  // Mouse tracking
+  const hovering = useRef(true);
+  const globalPointer = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const handleLeave = () => { hovering.current = false; };
+    const handleEnter = () => { hovering.current = true; };
+
+    document.body.addEventListener("mouseleave", handleLeave);
+    document.body.addEventListener("mouseenter", handleEnter);
+
+    return () => {
+      document.body.removeEventListener("mouseleave", handleLeave);
+      document.body.removeEventListener("mouseenter", handleEnter);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const x = (event.clientX / window.innerWidth) * 2 - 1;
+      const y = -(event.clientY / window.innerHeight) * 2 + 1;
+      globalPointer.current = { x, y };
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+    };
+  }, []);
+
+  // Animation loop
+  useFrame((state) => {
+    const { clock, pointer } = state;
+    material.uniforms.uTime.value = clock.getElapsedTime();
+
+    let targetX: number | null = null;
+    let targetY: number | null = null;
+
+    const cfg = MEDUSAE_DEFAULTS;
+
+    if (hovering.current) {
+      const pointerSource = globalPointer.current ?? pointer;
+      const baseX = (pointerSource.x * viewport.width) / 2;
+      const baseY = (pointerSource.y * viewport.height) / 2;
+      const t = clock.getElapsedTime();
+      const jitterRadius = Math.min(viewport.width, viewport.height) * cfg.cursor.radius;
+      const jitterX = (Math.sin(t * 0.35) + Math.sin(t * 0.77 + 1.2)) * 0.5;
+      const jitterY = (Math.cos(t * 0.31) + Math.sin(t * 0.63 + 2.4)) * 0.5;
+      const followStrength = cfg.particles.cursorFollowStrength;
+      targetX = (baseX + jitterX * jitterRadius * cfg.cursor.strength) * followStrength;
+      targetY = (baseY + jitterY * jitterRadius * cfg.cursor.strength) * followStrength;
+    }
+
+    const current = material.uniforms.uMouse.value;
+    const dragFactor = cfg.cursor.dragFactor;
+
+    if (targetX !== null && targetY !== null) {
+      current.x += (targetX - current.x) * dragFactor;
+      current.y += (targetY - current.y) * dragFactor;
+    }
+  });
+
+  return <instancedMesh ref={meshRef} args={[geometry, material, count]} />;
+}
+
+/* ── Public ParticleField Component ── */
 
 type ParticleFieldProps = {
   className?: string;
 };
 
-/* ── Particle data stored in flat arrays for zero-alloc rendering ── */
-
-interface ParticleArrays {
-  /** Current position */
-  x: Float32Array;
-  y: Float32Array;
-  /** Angle on the ring (used for orbital drift) */
-  ringAngle: Float32Array;
-  /** Distance from ring center */
-  ringRadius: Float32Array;
-  /** Visual properties */
-  strokeAngle: Float32Array;
-  strokeLength: Float32Array;
-  strokeThickness: Float32Array;
-  opacity: Float32Array;
-  /** Orbital drift speed */
-  orbitSpeed: Float32Array;
-  /** Radial oscillation phase */
-  oscPhase: Float32Array;
-  /** Color index into palette */
-  colorIndex: Uint8Array;
-}
-
-function pickCount(width: number): number {
-  const c = PARTICLE_CONFIG.count;
-  if (width < 768) return c.mobile;
-  if (width < 1100) return c.tablet;
-  return c.desktop;
-}
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-/**
- * Antigravity-style ring-particle field.
- * Particles are distributed in an annulus around a center that chases the cursor.
- */
 export function ParticleField({ className }: ParticleFieldProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const canvas = document.createElement("canvas");
-    canvas.className = "particle-canvas";
-    container.appendChild(canvas);
-
-    const ctx = canvas.getContext("2d", { alpha: true });
-    if (!ctx) {
-      container.removeChild(canvas);
-      return;
-    }
-
-    const cfg = PARTICLE_CONFIG;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    let width = 0;
-    let height = 0;
-    let dpr = 1;
-    let frameId = 0;
-    let visible = true;
-    let startTime = performance.now();
-
-    // Debug mode
-    const isDebug = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("debug");
-    let frameCount = 0;
-    let lastFpsTime = performance.now();
-    let fps = 0;
-
-    // Mouse / center state
-    const mouse = { x: 0, y: 0, active: false };
-    const center = { x: 0, y: 0 };
-
-    // Particle arrays
-    let particles: ParticleArrays | null = null;
-    let count = 0;
-
-    /* ── Resize ─────────────────────────────────────── */
-    const resize = () => {
-      width = container.clientWidth;
-      height = container.clientHeight;
-      dpr = Math.min(window.devicePixelRatio, cfg.maxDpr);
-
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      // Reset center to middle
-      center.x = width / 2;
-      center.y = height / 2;
-    };
-
-    /* ── Create particles in ring distribution ────── */
-    const createParticles = () => {
-      count = reducedMotion
-        ? Math.floor(pickCount(width) * 0.15)
-        : pickCount(width);
-
-      const dim = Math.min(width, height);
-      const innerR = dim * cfg.ring.innerRadius;
-      const outerR = dim * cfg.ring.outerRadius;
-      const s = cfg.stroke;
-      const o = cfg.orbitSpeed;
-
-      const p: ParticleArrays = {
-        x: new Float32Array(count),
-        y: new Float32Array(count),
-        ringAngle: new Float32Array(count),
-        ringRadius: new Float32Array(count),
-        strokeAngle: new Float32Array(count),
-        strokeLength: new Float32Array(count),
-        strokeThickness: new Float32Array(count),
-        opacity: new Float32Array(count),
-        orbitSpeed: new Float32Array(count),
-        oscPhase: new Float32Array(count),
-        colorIndex: new Uint8Array(count),
-      };
-
-      for (let i = 0; i < count; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        // Use sqrt for uniform area distribution in annulus
-        const rNorm = Math.sqrt(Math.random());
-        const r = innerR + rNorm * (outerR - innerR);
-
-        p.ringAngle[i] = angle;
-        p.ringRadius[i] = r;
-        p.x[i] = center.x + Math.cos(angle) * r;
-        p.y[i] = center.y + Math.sin(angle) * r;
-        p.strokeAngle[i] = Math.random() * Math.PI * 2;
-        p.strokeLength[i] = s.minLength + Math.random() * (s.maxLength - s.minLength);
-        p.strokeThickness[i] = s.minThickness + Math.random() * (s.maxThickness - s.minThickness);
-
-        // Alpha fades at inner/outer edges of the ring for depth illusion
-        const edgeFade =
-          rNorm < 0.15 ? rNorm / 0.15 :
-            rNorm > 0.85 ? (1 - rNorm) / 0.15 :
-              1;
-        p.opacity[i] = lerp(s.minOpacity, s.maxOpacity, Math.random()) * edgeFade;
-
-        p.orbitSpeed[i] = (o.min + Math.random() * (o.max - o.min)) * (Math.random() < 0.5 ? 1 : -1);
-        p.oscPhase[i] = Math.random() * Math.PI * 2;
-        p.colorIndex[i] = Math.floor(Math.random() * cfg.palette.length);
-      }
-
-      particles = p;
-    };
-
-    resize();
-    createParticles();
-
-    /* ── Visibility observer ───────────────────────── */
-    const observer = new IntersectionObserver(
-      (entries) => { visible = !!entries[0]?.isIntersecting; },
-      { threshold: 0.05 },
-    );
-    observer.observe(container);
-
-    /* ── Mouse tracking ────────────────────────────── */
-    const handleMouseMove = (e: MouseEvent) => {
-      const rect = container.getBoundingClientRect();
-      mouse.x = e.clientX - rect.left;
-      mouse.y = e.clientY - rect.top;
-      mouse.active = true;
-    };
-
-    const handleMouseLeave = () => {
-      mouse.active = false;
-    };
-
-    // Touch support for mobile
-    const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length > 0) {
-        const rect = container.getBoundingClientRect();
-        mouse.x = e.touches[0].clientX - rect.left;
-        mouse.y = e.touches[0].clientY - rect.top;
-        mouse.active = true;
-      }
-    };
-
-    const handleTouchEnd = () => {
-      mouse.active = false;
-    };
-
-    container.addEventListener("mousemove", handleMouseMove, { passive: true });
-    container.addEventListener("mouseleave", handleMouseLeave);
-    container.addEventListener("touchmove", handleTouchMove, { passive: true });
-    container.addEventListener("touchend", handleTouchEnd);
-
-    /* ── Animation loop ────────────────────────────── */
-    let prevTime = performance.now();
-
-    const animate = (now: number) => {
-      frameId = requestAnimationFrame(animate);
-      if (!visible || !particles) return;
-
-      // Delta time, clamped to avoid spiral of death
-      const rawDt = now - prevTime;
-      prevTime = now;
-      const dt = Math.min(rawDt, 33); // cap at ~30fps equivalent step
-      const elapsed = now - startTime;
-
-      // FPS counter (debug)
-      if (isDebug) {
-        frameCount++;
-        if (now - lastFpsTime >= 1000) {
-          fps = frameCount;
-          frameCount = 0;
-          lastFpsTime = now;
-        }
-      }
-
-      // ── Update center position ──
-      if (mouse.active) {
-        center.x += (mouse.x - center.x) * cfg.followStrength;
-        center.y += (mouse.y - center.y) * cfg.followStrength;
-      } else {
-        // Idle: gentle Lissajous drift around canvas center
-        const amp = cfg.idleDriftAmplitude;
-        const spd = cfg.idleDriftSpeed;
-        const idleX = width / 2 + Math.sin(elapsed * spd) * amp;
-        const idleY = height / 2 + Math.cos(elapsed * spd * 0.7) * amp * 0.6;
-        center.x += (idleX - center.x) * 0.02;
-        center.y += (idleY - center.y) * 0.02;
-      }
-
-      // ── Clear ──
-      ctx.clearRect(0, 0, width, height);
-
-      const p = particles;
-      const dim = Math.min(width, height);
-      const innerR = dim * cfg.ring.innerRadius;
-      const outerR = dim * cfg.ring.outerRadius;
-
-      // ── Update & draw particles ──
-      for (let i = 0; i < count; i++) {
-        // Orbital drift
-        p.ringAngle[i] += p.orbitSpeed[i] * dt;
-
-        // Subtle radial oscillation
-        const oscAmount = Math.sin(elapsed * 0.001 + p.oscPhase[i]) * 8;
-        const r = p.ringRadius[i] + oscAmount;
-
-        // Position relative to moving center
-        const angle = p.ringAngle[i];
-        p.x[i] = center.x + Math.cos(angle) * r;
-        p.y[i] = center.y + Math.sin(angle) * r;
-
-        // Slowly rotate stroke angle
-        p.strokeAngle[i] += 0.0002 * dt;
-
-        // Draw stroke
-        const halfLen = p.strokeLength[i] / 2;
-        const cos = Math.cos(p.strokeAngle[i]);
-        const sin = Math.sin(p.strokeAngle[i]);
-        const x = p.x[i];
-        const y = p.y[i];
-
-        ctx.beginPath();
-        ctx.moveTo(x - cos * halfLen, y - sin * halfLen);
-        ctx.lineTo(x + cos * halfLen, y + sin * halfLen);
-        ctx.strokeStyle = cfg.palette[p.colorIndex[i]];
-        ctx.globalAlpha = p.opacity[i];
-        ctx.lineWidth = p.strokeThickness[i];
-        ctx.lineCap = "round";
-        ctx.stroke();
-      }
-
-      ctx.globalAlpha = 1;
-
-      // ── Debug overlay ──
-      if (isDebug) {
-        ctx.save();
-        ctx.fillStyle = "rgba(0,0,0,0.7)";
-        ctx.fillRect(8, 8, 220, 90);
-        ctx.fillStyle = "#0f0";
-        ctx.font = "12px monospace";
-        ctx.fillText(`FPS: ${fps}`, 16, 28);
-        ctx.fillText(`Particles: ${count}`, 16, 44);
-        ctx.fillText(`Center: ${center.x.toFixed(0)}, ${center.y.toFixed(0)}`, 16, 60);
-        ctx.fillText(`Follow: ${cfg.followStrength}`, 16, 76);
-        ctx.fillText(`Mouse: ${mouse.active ? "active" : "idle"}`, 16, 92);
-        ctx.restore();
-      }
-    };
-
-    frameId = requestAnimationFrame(animate);
-
-    /* ── Resize handler ────────────────────────────── */
-    const handleResize = () => {
-      resize();
-      createParticles();
-    };
-    window.addEventListener("resize", handleResize);
-
-    /* ── Cleanup ───────────────────────────────────── */
-    return () => {
-      cancelAnimationFrame(frameId);
-      window.removeEventListener("resize", handleResize);
-      container.removeEventListener("mousemove", handleMouseMove);
-      container.removeEventListener("mouseleave", handleMouseLeave);
-      container.removeEventListener("touchmove", handleTouchMove);
-      container.removeEventListener("touchend", handleTouchEnd);
-      observer.disconnect();
-      if (canvas.parentNode === container) container.removeChild(canvas);
-    };
-  }, []);
-
   return (
-    <div ref={containerRef} className={className} aria-hidden="true">
-      <div className="particle-fallback" />
+    <div className={className} aria-hidden="true">
+      <Canvas
+        className="particle-canvas"
+        camera={{ position: [0, 0, 5] }}
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
+        gl={{ alpha: true, antialias: false, powerPreference: "high-performance" }}
+      >
+        <color attach="background" args={["#ffffff"]} />
+        <Particles />
+      </Canvas>
     </div>
   );
 }
