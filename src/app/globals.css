@@ -247,6 +247,7 @@ section {
   inset: 0;
   z-index: 0;
   overflow: hidden;
+  pointer-events: none;
 }
 
 .particle-canvas {
@@ -255,6 +256,7 @@ section {
   width: 100%;
   height: 100%;
   display: block;
+  pointer-events: none;
 }
 
 .particle-fallback {
@@ -262,10 +264,6 @@ section {
   inset: 0;
   transition: opacity 400ms ease;
   pointer-events: none;
-}
-
-.particle-ready .particle-fallback {
-  opacity: 0;
 }
 
 .hero-grid {
@@ -289,19 +287,27 @@ section {
 
 .hero-typed {
   font-size: clamp(2.8rem, 7vw, 5.6rem);
-  line-height: 0.94;
+  line-height: 1.02;
   font-weight: 500;
   letter-spacing: -0.04em;
 }
 
 .typed-lines-wrap {
   display: grid;
-  gap: 0.08em;
+  gap: 0.06em;
 }
 
 .typed-line {
   display: block;
   white-space: nowrap;
+}
+
+.typed-line--static {
+  opacity: 1;
+}
+
+.typed-line--accent {
+  min-height: 1.1em;
 }
 
 .typed-line.line-accent {
@@ -312,21 +318,21 @@ section {
   color: var(--ink-strong);
 }
 
-.typed-char {
-  display: inline-block;
-  will-change: transform, opacity;
+.typed-cycling-text {
+  display: inline;
 }
 
 .typed-cursor {
   display: inline-block;
-  width: 2px;
-  height: 0.8em;
+  width: 3px;
+  height: 0.78em;
   background: var(--brand);
   vertical-align: baseline;
   animation: blink 1s step-end infinite;
-  margin-left: 4px;
+  margin-left: 2px;
   font-size: 0;
-  border-radius: 1px;
+  border-radius: 2px;
+  transform: translateY(0.06em);
 }
 
 @keyframes blink {

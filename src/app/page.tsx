@@ -12,9 +12,7 @@ import {
   faqItems,
   featureItems,
   heroHighlights,
-  heroTypedLines,
   navItems,
-  particleConfig,
   showcaseItems,
   useCaseItems,
 } from "@/data/landing";
@@ -24,7 +22,7 @@ export default function Home() {
     <>
       <Navbar items={navItems} />
       <main>
-        <HeroSection lines={heroTypedLines} highlights={heroHighlights} motionConfig={particleConfig} />
+        <HeroSection highlights={heroHighlights} />
         <FeaturesSection items={featureItems} />
         <ExploreCtaSection />
         <ProductShowcaseSection items={showcaseItems} />

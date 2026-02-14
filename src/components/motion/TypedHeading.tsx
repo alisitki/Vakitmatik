@@ -1,84 +1,120 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
-import type { HeroTypedLine } from "@/types/landing";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { TYPEWRITER_CONFIG } from "@/config/heroMotion";
 
-type TypedHeadingProps = {
-  lines: HeroTypedLine[];
-  className?: string;
-  startDelay?: number;
-  once?: boolean;
-};
+type TypewriterState = "IDLE" | "TYPING" | "PAUSING" | "DELETING" | "PAUSE_BEFORE_NEXT";
 
-export function TypedHeading({ lines, className, startDelay = 0, once = true }: TypedHeadingProps) {
-  const rootRef = useRef<HTMLHeadingElement>(null);
+/**
+ * Custom useTypewriter hook — SSR-safe cycling typewriter.
+ * Returns the current visible text for the cycling phrase slot.
+ */
+function useTypewriter() {
+  const cfg = TYPEWRITER_CONFIG;
+  const [displayText, setDisplayText] = useState("");
+  const stateRef = useRef<TypewriterState>("IDLE");
+  const phraseIndexRef = useRef(0);
+  const charIndexRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const joinedText = useMemo(() => lines.map((line) => line.text).join(" "), [lines]);
+  const tick = useCallback(() => {
+    const state = stateRef.current;
+    const phrases = cfg.phrases;
+    const currentPhrase = phrases[phraseIndexRef.current];
+
+    switch (state) {
+      case "IDLE":
+        stateRef.current = "TYPING";
+        timerRef.current = setTimeout(tick, cfg.startDelay);
+        break;
+
+      case "TYPING":
+        if (charIndexRef.current < currentPhrase.length) {
+          charIndexRef.current++;
+          setDisplayText(currentPhrase.slice(0, charIndexRef.current));
+          timerRef.current = setTimeout(tick, cfg.typeSpeed);
+        } else {
+          stateRef.current = "PAUSING";
+          timerRef.current = setTimeout(tick, cfg.pauseAfterType);
+        }
+        break;
+
+      case "PAUSING":
+        stateRef.current = "DELETING";
+        timerRef.current = setTimeout(tick, cfg.backSpeed);
+        break;
+
+      case "DELETING":
+        if (charIndexRef.current > 0) {
+          charIndexRef.current--;
+          setDisplayText(currentPhrase.slice(0, charIndexRef.current));
+          timerRef.current = setTimeout(tick, cfg.backSpeed);
+        } else {
+          stateRef.current = "PAUSE_BEFORE_NEXT";
+          timerRef.current = setTimeout(tick, cfg.pauseAfterDelete);
+        }
+        break;
+
+      case "PAUSE_BEFORE_NEXT":
+        if (cfg.loop || phraseIndexRef.current < phrases.length - 1) {
+          phraseIndexRef.current = (phraseIndexRef.current + 1) % phrases.length;
+          charIndexRef.current = 0;
+          stateRef.current = "TYPING";
+          timerRef.current = setTimeout(tick, cfg.typeSpeed);
+        }
+        break;
+    }
+  }, [cfg]);
 
   useEffect(() => {
-    gsap.registerPlugin(ScrollTrigger);
-
-    const node = rootRef.current;
-    if (!node) {
-      return;
-    }
-
-    const chars = Array.from(node.querySelectorAll<HTMLElement>("[data-char]"));
-    if (chars.length === 0) {
-      return;
-    }
-
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reducedMotion) {
-      gsap.set(chars, { opacity: 1, y: 0 });
-      return;
-    }
-
-    const ctx = gsap.context(() => {
-      // Ensure initial state is hidden but ready
-      gsap.set(chars, { opacity: 0, y: 26 });
-
-      gsap.to(chars, {
-        opacity: 1,
-        y: 0,
-        duration: 0.55,
-        ease: "power3.out",
-        stagger: 0.02,
-        delay: startDelay,
-        // Remove scrollTrigger for Hero or make it very sensitive
-        scrollTrigger: {
-          trigger: node,
-          start: "top bottom", // Trigger as soon as it enters viewport
-          once,
-        },
-        onComplete: () => {
-          // Safety ensure visibility
-          gsap.set(chars, { opacity: 1, y: 0 });
-        }
-      });
-    }, node);
+    stateRef.current = "IDLE";
+    phraseIndexRef.current = 0;
+    charIndexRef.current = 0;
+    tick();
 
     return () => {
-      ctx.revert();
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [lines, once, startDelay]);
+  }, [tick]);
+
+  return displayText;
+}
+
+/**
+ * TypedHeading — Antigravity-style hero headline with cycling typewriter.
+ * 
+ * Layout:
+ *   Static prefix  ("Vakitmatik ile")
+ *   Cycling accent  ("vakit bilgisini" | "namaz vakitlerini" | ...)  ← typed
+ *   Static suffix  ("tek bakışta yönetin.")
+ */
+export function TypedHeading({ className }: { className?: string }) {
+  const cyclingText = useTypewriter();
+  const cfg = TYPEWRITER_CONFIG;
 
   return (
-    <h1 ref={rootRef} className={className} aria-label={joinedText}>
-      <span className="sr-only">{joinedText}</span>
+    <h1 className={className} aria-label={`${cfg.staticPrefix} ${cfg.phrases[0]} ${cfg.staticSuffix}`}>
+      {/* Screen reader gets the full text */}
+      <span className="sr-only">
+        {cfg.staticPrefix} {cfg.phrases[0]} {cfg.staticSuffix}
+      </span>
+
       <span aria-hidden="true" className="typed-lines-wrap">
-        {lines.map((line, lineIndex) => (
-          <span key={`${line.text}-${lineIndex}`} className={`typed-line ${line.className ?? ""}`}>
-            {line.text.split("").map((char, charIndex) => (
-              <span data-char key={`${lineIndex}-${charIndex}`} className="typed-char">
-                {char === " " ? "\u00A0" : char}
-              </span>
-            ))}
-          </span>
-        ))}
-        <span className="typed-cursor" aria-hidden="true">|</span>
+        {/* Line 1: static prefix */}
+        <span className="typed-line typed-line--static line-strong">
+          {cfg.staticPrefix}
+        </span>
+
+        {/* Line 2: cycling typewriter phrase */}
+        <span className="typed-line typed-line--accent line-accent">
+          <span className="typed-cycling-text">{cyclingText}</span>
+          <span className="typed-cursor" aria-hidden="true">|</span>
+        </span>
+
+        {/* Line 3: static suffix */}
+        <span className="typed-line typed-line--static">
+          {cfg.staticSuffix}
+        </span>
       </span>
     </h1>
   );
