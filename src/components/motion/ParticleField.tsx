@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { PARTICLE_CONFIG } from "@/config/heroMotion";
+import { MEDUSAE_DEFAULTS, type MedusaeConfig } from "@/config/medusaeConfig";
 
 /* ── GLSL Shaders (adapted from BreathDearMedusae) ── */
 
@@ -150,44 +150,9 @@ const FRAGMENT_SHADER = `
   }
 `;
 
-/* ── Default config for the halo/particle system ── */
-const MEDUSAE_DEFAULTS = {
-  cursor: {
-    radius: 0.065,
-    strength: 3,
-    dragFactor: 0.015,
-  },
-  halo: {
-    outerOscFrequency: 2.6,
-    outerOscAmplitude: 0.76,
-    radiusBase: 2.4,
-    radiusAmplitude: 0.5,
-    shapeAmplitude: 0.75,
-    rimWidth: 1.8,
-    outerStartOffset: 0.4,
-    outerEndOffset: 2.2,
-    scaleX: 1.3,
-    scaleY: 1,
-  },
-  particles: {
-    baseSize: 0.016,
-    activeSize: 0.044,
-    blobScaleX: 1,
-    blobScaleY: 0.6,
-    rotationSpeed: 0.1,
-    rotationJitter: 0.2,
-    cursorFollowStrength: 1,
-    oscillationFactor: 1,
-    colorBase: "#4285F4",
-    colorOne: "#4285F4",
-    colorTwo: "#EA4335",
-    colorThree: "#FBBC04",
-  },
-};
-
 /* ── Inner Three.js Scene ── */
 
-function Particles() {
+function Particles({ config = MEDUSAE_DEFAULTS }: { config?: MedusaeConfig }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const { viewport } = useThree();
 
@@ -202,27 +167,27 @@ function Particles() {
       uTime: { value: 0 },
       uMouse: { value: new THREE.Vector2(0, 0) },
       uResolution: { value: new THREE.Vector2(typeof window !== "undefined" ? window.innerWidth : 1920, typeof window !== "undefined" ? window.innerHeight : 1080) },
-      uOuterOscFrequency: { value: MEDUSAE_DEFAULTS.halo.outerOscFrequency },
-      uOuterOscAmplitude: { value: MEDUSAE_DEFAULTS.halo.outerOscAmplitude },
-      uHaloRadiusBase: { value: MEDUSAE_DEFAULTS.halo.radiusBase },
-      uHaloRadiusAmplitude: { value: MEDUSAE_DEFAULTS.halo.radiusAmplitude },
-      uHaloShapeAmplitude: { value: MEDUSAE_DEFAULTS.halo.shapeAmplitude },
-      uHaloRimWidth: { value: MEDUSAE_DEFAULTS.halo.rimWidth },
-      uHaloOuterStartOffset: { value: MEDUSAE_DEFAULTS.halo.outerStartOffset },
-      uHaloOuterEndOffset: { value: MEDUSAE_DEFAULTS.halo.outerEndOffset },
-      uHaloScaleX: { value: MEDUSAE_DEFAULTS.halo.scaleX },
-      uHaloScaleY: { value: MEDUSAE_DEFAULTS.halo.scaleY },
-      uParticleBaseSize: { value: MEDUSAE_DEFAULTS.particles.baseSize },
-      uParticleActiveSize: { value: MEDUSAE_DEFAULTS.particles.activeSize },
-      uBlobScaleX: { value: MEDUSAE_DEFAULTS.particles.blobScaleX },
-      uBlobScaleY: { value: MEDUSAE_DEFAULTS.particles.blobScaleY },
-      uParticleRotationSpeed: { value: MEDUSAE_DEFAULTS.particles.rotationSpeed },
-      uParticleRotationJitter: { value: MEDUSAE_DEFAULTS.particles.rotationJitter },
-      uParticleOscillationFactor: { value: MEDUSAE_DEFAULTS.particles.oscillationFactor },
-      uParticleColorBase: { value: new THREE.Color(MEDUSAE_DEFAULTS.particles.colorBase) },
-      uParticleColorOne: { value: new THREE.Color(MEDUSAE_DEFAULTS.particles.colorOne) },
-      uParticleColorTwo: { value: new THREE.Color(MEDUSAE_DEFAULTS.particles.colorTwo) },
-      uParticleColorThree: { value: new THREE.Color(MEDUSAE_DEFAULTS.particles.colorThree) },
+      uOuterOscFrequency: { value: config.halo.outerOscFrequency },
+      uOuterOscAmplitude: { value: config.halo.outerOscAmplitude },
+      uHaloRadiusBase: { value: config.halo.radiusBase },
+      uHaloRadiusAmplitude: { value: config.halo.radiusAmplitude },
+      uHaloShapeAmplitude: { value: config.halo.shapeAmplitude },
+      uHaloRimWidth: { value: config.halo.rimWidth },
+      uHaloOuterStartOffset: { value: config.halo.outerStartOffset },
+      uHaloOuterEndOffset: { value: config.halo.outerEndOffset },
+      uHaloScaleX: { value: config.halo.scaleX },
+      uHaloScaleY: { value: config.halo.scaleY },
+      uParticleBaseSize: { value: config.particles.baseSize },
+      uParticleActiveSize: { value: config.particles.activeSize },
+      uBlobScaleX: { value: config.particles.blobScaleX },
+      uBlobScaleY: { value: config.particles.blobScaleY },
+      uParticleRotationSpeed: { value: config.particles.rotationSpeed },
+      uParticleRotationJitter: { value: config.particles.rotationJitter },
+      uParticleOscillationFactor: { value: config.particles.oscillationFactor },
+      uParticleColorBase: { value: new THREE.Color(config.particles.colorBase) },
+      uParticleColorOne: { value: new THREE.Color(config.particles.colorOne) },
+      uParticleColorTwo: { value: new THREE.Color(config.particles.colorTwo) },
+      uParticleColorThree: { value: new THREE.Color(config.particles.colorThree) },
     }),
     [],
   );
@@ -238,6 +203,31 @@ function Particles() {
       }),
     [uniforms],
   );
+
+  // Sync uniforms when config changes
+  useEffect(() => {
+    material.uniforms.uOuterOscFrequency.value = config.halo.outerOscFrequency;
+    material.uniforms.uOuterOscAmplitude.value = config.halo.outerOscAmplitude;
+    material.uniforms.uHaloRadiusBase.value = config.halo.radiusBase;
+    material.uniforms.uHaloRadiusAmplitude.value = config.halo.radiusAmplitude;
+    material.uniforms.uHaloShapeAmplitude.value = config.halo.shapeAmplitude;
+    material.uniforms.uHaloRimWidth.value = config.halo.rimWidth;
+    material.uniforms.uHaloOuterStartOffset.value = config.halo.outerStartOffset;
+    material.uniforms.uHaloOuterEndOffset.value = config.halo.outerEndOffset;
+    material.uniforms.uHaloScaleX.value = config.halo.scaleX;
+    material.uniforms.uHaloScaleY.value = config.halo.scaleY;
+    material.uniforms.uParticleBaseSize.value = config.particles.baseSize;
+    material.uniforms.uParticleActiveSize.value = config.particles.activeSize;
+    material.uniforms.uBlobScaleX.value = config.particles.blobScaleX;
+    material.uniforms.uBlobScaleY.value = config.particles.blobScaleY;
+    material.uniforms.uParticleRotationSpeed.value = config.particles.rotationSpeed;
+    material.uniforms.uParticleRotationJitter.value = config.particles.rotationJitter;
+    material.uniforms.uParticleOscillationFactor.value = config.particles.oscillationFactor;
+    material.uniforms.uParticleColorBase.value.set(config.particles.colorBase);
+    material.uniforms.uParticleColorOne.value.set(config.particles.colorOne);
+    material.uniforms.uParticleColorTwo.value.set(config.particles.colorTwo);
+    material.uniforms.uParticleColorThree.value.set(config.particles.colorThree);
+  }, [config, material]);
 
   // Build instance grid
   useEffect(() => {
@@ -319,23 +309,21 @@ function Particles() {
     let targetX: number | null = null;
     let targetY: number | null = null;
 
-    const cfg = MEDUSAE_DEFAULTS;
-
     if (hovering.current) {
       const pointerSource = globalPointer.current ?? pointer;
       const baseX = (pointerSource.x * viewport.width) / 2;
       const baseY = (pointerSource.y * viewport.height) / 2;
       const t = clock.getElapsedTime();
-      const jitterRadius = Math.min(viewport.width, viewport.height) * cfg.cursor.radius;
+      const jitterRadius = Math.min(viewport.width, viewport.height) * config.cursor.radius;
       const jitterX = (Math.sin(t * 0.35) + Math.sin(t * 0.77 + 1.2)) * 0.5;
       const jitterY = (Math.cos(t * 0.31) + Math.sin(t * 0.63 + 2.4)) * 0.5;
-      const followStrength = cfg.particles.cursorFollowStrength;
-      targetX = (baseX + jitterX * jitterRadius * cfg.cursor.strength) * followStrength;
-      targetY = (baseY + jitterY * jitterRadius * cfg.cursor.strength) * followStrength;
+      const followStrength = config.particles.cursorFollowStrength;
+      targetX = (baseX + jitterX * jitterRadius * config.cursor.strength) * followStrength;
+      targetY = (baseY + jitterY * jitterRadius * config.cursor.strength) * followStrength;
     }
 
     const current = material.uniforms.uMouse.value;
-    const dragFactor = cfg.cursor.dragFactor;
+    const dragFactor = config.cursor.dragFactor;
 
     if (targetX !== null && targetY !== null) {
       current.x += (targetX - current.x) * dragFactor;
@@ -350,9 +338,10 @@ function Particles() {
 
 type ParticleFieldProps = {
   className?: string;
+  config?: MedusaeConfig;
 };
 
-export function ParticleField({ className }: ParticleFieldProps) {
+export function ParticleField({ className, config }: ParticleFieldProps) {
   return (
     <div className={className} aria-hidden="true">
       <Canvas
@@ -362,7 +351,7 @@ export function ParticleField({ className }: ParticleFieldProps) {
         gl={{ alpha: true, antialias: false, powerPreference: "high-performance" }}
       >
         <color attach="background" args={["#ffffff"]} />
-        <Particles />
+        <Particles config={config} />
       </Canvas>
     </div>
   );

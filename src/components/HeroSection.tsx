@@ -1,13 +1,19 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import gsap from "gsap";
 import { ParticleField } from "@/components/motion/ParticleField";
 import { Reveal } from "@/components/motion/Reveal";
 import { TypedHeading } from "@/components/motion/TypedHeading";
+import { ParticleSettings } from "@/components/motion/ParticleSettings";
+import { DynamicVakitRGB, type DeviceData } from "@/components/motion/DynamicVakitRGB";
 import { ENTRANCE_CONFIG } from "@/config/heroMotion";
+import { MEDUSAE_DEFAULTS, type MedusaeConfig } from "@/config/medusaeConfig";
 import type { HeroHighlightItem } from "@/types/landing";
+import { useMemo } from "react";
+
+const STORAGE_KEY = "vakitmatik-particle-config";
 
 type HeroSectionProps = {
   highlights: HeroHighlightItem[];
@@ -16,6 +22,8 @@ type HeroSectionProps = {
 export function HeroSection({ highlights }: HeroSectionProps) {
   const heroRef = useRef<HTMLElement>(null);
   const hasAnimated = useRef(false);
+  const [particleConfig, setParticleConfig] = useEffectState<MedusaeConfig>(MEDUSAE_DEFAULTS, STORAGE_KEY);
+  const deviceData = useDeviceData();
 
   useEffect(() => {
     const node = heroRef.current;
@@ -83,7 +91,7 @@ export function HeroSection({ highlights }: HeroSectionProps) {
 
   return (
     <section id="urun" className="hero-section" ref={heroRef}>
-      <ParticleField className="hero-particle-layer" />
+      <ParticleField className="hero-particle-layer" config={particleConfig} />
 
       <div className="container-shell hero-grid">
         <div className="hero-copy">
@@ -104,12 +112,9 @@ export function HeroSection({ highlights }: HeroSectionProps) {
         </div>
 
         <div className="hero-device">
-          <Image
-            src="/images/vakitmatik-device.svg"
-            alt="Vakitmatik cihazı temsil görseli"
-            width={760}
-            height={560}
-            priority
+          <DynamicVakitRGB
+            colors={particleConfig.device}
+            data={deviceData}
             className="hero-device-image"
           />
         </div>
@@ -123,6 +128,64 @@ export function HeroSection({ highlights }: HeroSectionProps) {
           </Reveal>
         ))}
       </div>
+
+      <ParticleSettings config={particleConfig} onChange={setParticleConfig} />
     </section>
   );
+}
+
+/** ── Custom hook for state with persistence ── */
+function useEffectState<T>(defaultValue: T, key: string): [T, (val: T) => void] {
+  const [state, setState] = useState<T>(defaultValue);
+
+  useEffect(() => {
+    const savedConfig = localStorage.getItem(key);
+    if (savedConfig) {
+      try {
+        const parsed = JSON.parse(savedConfig);
+        // Robust merge to ensure new keys (like device animation) are present
+        setState({
+          ...defaultValue as any, // Cast to any to allow merging with specific properties like 'device'
+          ...parsed,
+          device: {
+            ...(defaultValue as any).device,
+            ...(parsed.device || {})
+          }
+        });
+      } catch (e) {
+        console.error("Failed to parse config", e);
+      }
+    }
+  }, [key]);
+
+  const setAndSave = (val: T) => {
+    setState(val);
+    localStorage.setItem(key, JSON.stringify(val));
+  };
+
+  return [state, setAndSave];
+}
+
+function useDeviceData(): DeviceData {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return useMemo(() => ({
+    times: {
+      imsak: "05:24",
+      gunes: "06:48",
+      ogle: "13:12",
+      ikindi: "16:20",
+      aksam: "18:55",
+      yatsi: "20:15"
+    },
+    clock: now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+    year: now.getFullYear().toString(),
+    day: now.getDate().toString().padStart(2, '0'),
+    month: (now.getMonth() + 1).toString().padStart(2, '0')
+  }), [now]);
 }
